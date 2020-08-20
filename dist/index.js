@@ -2885,17 +2885,20 @@ exports.convertToSlackUsername = async (githubUsernames, githubClient, repoToken
     return slackIds;
 };
 exports.execPrReviewRequestedMention = async (payload, allInputs, githubClient, slackClient) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const { repoToken, configurationPath } = allInputs;
-    const requestedGithubUsername = payload.requested_reviewer.login;
+    const requestedGithubUsername = ((_a = payload.requested_reviewer) === null || _a === void 0 ? void 0 : _a.login) || ((_b = payload.requested_team) === null || _b === void 0 ? void 0 : _b.name);
+    if (!requestedGithubUsername) {
+        throw new Error("Can not find review requested user.");
+    }
     const slackIds = await exports.convertToSlackUsername([requestedGithubUsername], githubClient, repoToken, configurationPath);
     if (slackIds.length === 0) {
         return;
     }
-    const title = (_a = payload.pull_request) === null || _a === void 0 ? void 0 : _a.title;
-    const url = (_b = payload.pull_request) === null || _b === void 0 ? void 0 : _b.html_url;
+    const title = (_c = payload.pull_request) === null || _c === void 0 ? void 0 : _c.title;
+    const url = (_d = payload.pull_request) === null || _d === void 0 ? void 0 : _d.html_url;
     const requestedSlackUserId = slackIds[0];
-    const requestUsername = (_c = payload.sender) === null || _c === void 0 ? void 0 : _c.login;
+    const requestUsername = (_e = payload.sender) === null || _e === void 0 ? void 0 : _e.login;
     const message = `<@${requestedSlackUserId}> has been requested to review <${url}|${title}> by ${requestUsername}.`;
     const { slackWebhookUrl, iconUrl, botName } = allInputs;
     await slackClient.postToSlack(slackWebhookUrl, message, { iconUrl, botName });
@@ -2920,7 +2923,7 @@ exports.execNormalMention = async (payload, allInputs, githubClient, slackClient
 };
 const buildCurrentJobUrl = (runId) => {
     const { owner, repo } = github_1.context.repo;
-    return `https://github.com/${owner}/${repo}/runs/${runId}`;
+    return `https://github.com/${owner}/${repo}/actions/runs/${runId}`;
 };
 exports.execPostError = async (error, allInputs, slackClient) => {
     const { runId } = allInputs;
@@ -2968,6 +2971,7 @@ exports.main = async () => {
     }
     catch (error) {
         await exports.execPostError(error, allInputs, slack_1.SlackRepositoryImpl);
+        core.warning(JSON.stringify({ payload }));
     }
 };
 
@@ -32892,7 +32896,13 @@ exports.buildSlackPostMessage = (slackIdsForMention, issueTitle, commentLink, gi
     const mentionBlock = slackIdsForMention.map((id) => `<@${id}>`).join(" ");
     const body = githubBody
         .split("\n")
-        .map((line) => `> ${line}`)
+        .map((line, i) => {
+        // fix slack layout collapse problem when first line starts with blockquotes.
+        if (i === 0 && line.startsWith(">")) {
+            return `>\n> ${line}`;
+        }
+        return `> ${line}`;
+    })
         .join("\n");
     const message = [
         mentionBlock,

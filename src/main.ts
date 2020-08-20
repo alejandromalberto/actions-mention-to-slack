@@ -47,7 +47,13 @@ export const execPrReviewRequestedMention = async (
   slackClient: typeof SlackRepositoryImpl
 ) => {
   const { repoToken, configurationPath } = allInputs;
-  const requestedGithubUsername = payload.requested_reviewer.login;
+  const requestedGithubUsername =
+    payload.requested_reviewer?.login || payload.requested_team?.name;
+
+  if (!requestedGithubUsername) {
+    throw new Error("Can not find review requested user.");
+  }
+
   const slackIds = await convertToSlackUsername(
     [requestedGithubUsername],
     githubClient,
@@ -114,7 +120,7 @@ export const execNormalMention = async (
 
 const buildCurrentJobUrl = (runId: string) => {
   const { owner, repo } = context.repo;
-  return `https://github.com/${owner}/${repo}/runs/${runId}`;
+  return `https://github.com/${owner}/${repo}/actions/runs/${runId}`;
 };
 
 export const execPostError = async (
@@ -187,5 +193,6 @@ export const main = async () => {
     );
   } catch (error) {
     await execPostError(error, allInputs, SlackRepositoryImpl);
+    core.warning(JSON.stringify({ payload }));
   }
 };
